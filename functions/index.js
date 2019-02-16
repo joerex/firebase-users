@@ -97,7 +97,6 @@ exports.processRegisterUser = functions.auth.user().onCreate(async (user) => {
 
 /***
  * Validate email
- * curl -X POST -H "Content-Type:application/json" https://us-central1-handpan-343d9.cloudfunctions.net/validateEmail -d '{"email": "jdreckley@gmail.com", "token": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImEzMjJiNjhiY2U0MzExZTg2OTYzOTUzM2QzYTFhMjU1MWQ1ZTc0YzYiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL3NlY3VyZXRva2VuLmdvb2dsZS5jb20vaGFuZHBhbi0zNDNkOSIsImlzQWRtaW4iOnRydWUsImF1ZCI6ImhhbmRwYW4tMzQzZDkiLCJhdXRoX3RpbWUiOjE1Mzg2ODgwMDQsInVzZXJfaWQiOiJ0Mjk0OExFRzJtVFhaUlQ3NTFidldUNUZ1am8xIiwic3ViIjoidDI5NDhMRUcybVRYWlJUNzUxYnZXVDVGdWpvMSIsImlhdCI6MTUzODY4ODAwOSwiZXhwIjoxNTM4NjkxNjA5LCJlbWFpbCI6ImpkcmVja2xleUBnbWFpbC5jb20iLCJlbWFpbF92ZXJpZmllZCI6ZmFsc2UsImZpcmViYXNlIjp7ImlkZW50aXRpZXMiOnsiZW1haWwiOlsiamRyZWNrbGV5QGdtYWlsLmNvbSJdfSwic2lnbl9pbl9wcm92aWRlciI6InBhc3N3b3JkIn19.WKd82vjnVp3KRskqn7cpwElnX_wtbSxsIEsajg8tswZ-LKS194SQnbVyDTSWV44c3aVWh3JYeQMB8OvoTGV9QrvIIi6q0dKBI3318R3-JhMYd0Jv-FC7DUlIF0A10Wt5rrnyHGSYXr-2HHYtLELox-jGOzXgtzw9bNcxtTi26J06ArCmS1x8R-Qw5VoCy_26HsJDjqxKhBlvucw4paln2Z7WvtunCA4LzdnMtCM7R3RMVpsQpW6LoAO6YlQyI3wi1tsHbhmSbY4uinyhyCpXBzQDHG6IDdgq2MkZhbSJOhxVZyu_W9nakfx4EM2bdk0vUJAfW4rK8dwP7MtPPNLzJg"}'
  */
 
 
@@ -122,7 +121,6 @@ exports.validateEmail = functions.https.onRequest((req, res) => {
 
 /***
  * Invite user
- * curl -X POST -H "Content-Type:application/json" https://us-central1-handpan-343d9.cloudfunctions.net/inviteUser -d '{"email": "papa@gmail.com", "firstName": "Invitee", "lastName": "Roach", "role": 'manageer', "token": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImEzMjJiNjhiY2U0MzExZTg2OTYzOTUzM2QzYTFhMjU1MWQ1ZTc0YzYiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL3NlY3VyZXRva2VuLmdvb2dsZS5jb20vaGFuZHBhbi0zNDNkOSIsImlzQWRtaW4iOnRydWUsImF1ZCI6ImhhbmRwYW4tMzQzZDkiLCJhdXRoX3RpbWUiOjE1Mzg2ODgwMDQsInVzZXJfaWQiOiJ0Mjk0OExFRzJtVFhaUlQ3NTFidldUNUZ1am8xIiwic3ViIjoidDI5NDhMRUcybVRYWlJUNzUxYnZXVDVGdWpvMSIsImlhdCI6MTUzODY4ODAwOSwiZXhwIjoxNTM4NjkxNjA5LCJlbWFpbCI6ImpkcmVja2xleUBnbWFpbC5jb20iLCJlbWFpbF92ZXJpZmllZCI6ZmFsc2UsImZpcmViYXNlIjp7ImlkZW50aXRpZXMiOnsiZW1haWwiOlsiamRyZWNrbGV5QGdtYWlsLmNvbSJdfSwic2lnbl9pbl9wcm92aWRlciI6InBhc3N3b3JkIn19.WKd82vjnVp3KRskqn7cpwElnX_wtbSxsIEsajg8tswZ-LKS194SQnbVyDTSWV44c3aVWh3JYeQMB8OvoTGV9QrvIIi6q0dKBI3318R3-JhMYd0Jv-FC7DUlIF0A10Wt5rrnyHGSYXr-2HHYtLELox-jGOzXgtzw9bNcxtTi26J06ArCmS1x8R-Qw5VoCy_26HsJDjqxKhBlvucw4paln2Z7WvtunCA4LzdnMtCM7R3RMVpsQpW6LoAO6YlQyI3wi1tsHbhmSbY4uinyhyCpXBzQDHG6IDdgq2MkZhbSJOhxVZyu_W9nakfx4EM2bdk0vUJAfW4rK8dwP7MtPPNLzJg"}'
  */
 exports.inviteUser = functions.https.onRequest((req, res) => {
   return cors(req, res, _asyncToGenerator(function* () {
@@ -177,7 +175,7 @@ exports.inviteUser = functions.https.onRequest((req, res) => {
 
     console.log('Invite token', invite.key);
 
-    // send email
+    // TODO: send email
 
     res.status(200).send({});
   }));
@@ -185,7 +183,6 @@ exports.inviteUser = functions.https.onRequest((req, res) => {
 
 /***
  * Accept invite
- * curl -X POST -H "Content-Type:application/json" https://us-central1-handpan-343d9.cloudfunctions.net/acceptInvite -d '{"uid": "-LO4tEMkTcXta51B90VL", "email": "lenny@gmail.com", "password": "activate8", "firstName": "Lenny", "lastName": "Kravits", "token": "cODFTgjQr9CfG3IiltDUWVm4CoZQHQNtvRpt2YtMJgcevBIN3Px51sucDCexwqTgV4bB4iH8raqJmr5XPmVbRKjLEO5RP3jJ8sGZTiXs7RDMino23WW3LacWdoehAQ2C"}'
  */
 exports.acceptInvite = functions.https.onRequest((req, res) => {
   return cors(req, res, _asyncToGenerator(function* () {
@@ -250,13 +247,12 @@ exports.acceptInvite = functions.https.onRequest((req, res) => {
 
     yield admin.database().ref('invites/' + uid).remove();
 
-    res.status(200).end();
+    res.status(200).send();
   }));
 });
 
 /***
  * Create user
- * curl -X POST -H "Content-Type:application/json" https://us-central1-handpan-343d9.cloudfunctions.net/createUser -d '{"email": "pipi@gmail.com", "firstName": "Papa", "lastName": "Roach"}'
  */
 exports.createUser = functions.https.onRequest((req, res) => {
   const user = createUser(req.body);
@@ -265,11 +261,18 @@ exports.createUser = functions.https.onRequest((req, res) => {
 
 /***
  * Update with Admin role
- * curl -X POST -H "Content-Type:application/json" https://us-central1-handpan-343d9.cloudfunctions.net/addAdminRole -d '{"email": "jdreckley@gmail.com"}'
  */
 exports.addAdminRole = functions.https.onRequest((() => {
   var _ref7 = _asyncToGenerator(function* (req, res) {
     const user = yield admin.auth().getUserByEmail(req.body.email);
+
+    // check to make sure requesting user is an admin
+    const adminUser = yield checkIsAdmin(req.body.token, res);
+
+    if (!adminUser) {
+      return false;
+    }
+
     yield admin.auth().setCustomUserClaims(user.uid, { isAdmin: true });
     const metadataRef = admin.database().ref("metadata/" + user.uid);
     metadataRef.set({ refreshTime: new Date().getTime() });
