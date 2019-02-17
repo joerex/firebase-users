@@ -72,7 +72,7 @@ Three roles are currently available to use: `'manager'`, `'client'`, `'member'`.
 
 The token can be obtained from a logged in user with an admin role.
 
-When a user is invited an invite token is created. TODO: email token on invite.
+When a user is invited an invite token is created.
 
 TODO: email token on invite.
 
@@ -81,7 +81,7 @@ curl -X POST -H "Content-Type:application/json" https://<region>-<project-id>.cl
 ```
 
 #### acceptInvite
-Accept an invite given an `email`, `password`, `firstName`, `lastName`, and `token`. This token is created when `inviteUser` is called. 
+Accept an invite given an `email`, `password`, `firstName`, `lastName`, `key` and `token`. The key and token are created when `inviteUser` is called. 
 ```
 curl -X POST -H "Content-Type:application/json" https://<region>-<project-id>.cloudfunctions.net/acceptInvite -d '{"uid": "", "email": "", "password": "", "firstName": "", "lastName": "", "token": ""}'
 ```

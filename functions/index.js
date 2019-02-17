@@ -3,14 +3,13 @@
 let createUser = (() => {
   var _ref = _asyncToGenerator(function* (data) {
     const userData = {
-      email: data.email,
-      displayName: data.firstName + ' ' + data.lastName
+      email: data.email
     };
 
-    const metaData = {
-      email: data.email,
+    const profile = {
       firstName: data.firstName,
       lastName: data.lastName,
+      displayName: data.firstName + ' ' + data.lastName,
       refreshTime: new Date().getTime()
     };
 
@@ -22,8 +21,7 @@ let createUser = (() => {
       yield admin.auth().setCustomUserClaims(user.uid, data.customClaims);
     }
 
-    const metadataRef = admin.database().ref("metadata/" + user.uid);
-    metadataRef.set(metaData);
+    admin.database().ref("users/" + user.uid).set(profile);
 
     return user;
   });
@@ -55,19 +53,21 @@ let checkIsAdmin = (() => {
     const decodedToken = yield admin.auth().verifyIdToken(token);
 
     if (!decodedToken.uid) {
-      res.status(400).send({ message: 'Invalid token' });
+      res.status(400).json({ message: 'Invalid token' });
       return false;
     }
 
     const user = yield admin.auth().getUser(decodedToken.uid);
 
     if (!user) {
-      res.status(400).send({ message: 'Invalid token' });
+      // invalid token
+      res.status(400).json({ message: 'Access denied' });
       return false;
     }
 
     if (!user.customClaims.isAdmin) {
-      res.status(403).send({ message: 'You are not an admin' });
+      // not an admin
+      res.status(403).json({ message: 'Access denied' });
       return false;
     }
 
@@ -82,25 +82,6 @@ let checkIsAdmin = (() => {
 /***
  * Process registered user
  */
-/*
-
-// DISABLED in favor of custom create user functions with custom claims
-
-exports.processRegisterUser = functions.auth.user().onCreate(async (user) => {
-  if (user.email && !user.isClient) {
-    console.log('User before proccessing', user);
-    await admin.auth().setCustomUserClaims(user.uid, {isProcessed: true});
-
-    const metadataRef = admin.database().ref("metadata/" + user.uid);
-    const timestamp = new Date().getTime();
-    metadataRef.set({refreshTime: timestamp, email: user.email});
-  }
-});
-*/
-
-/***
- * Validate email
- */
 
 
 function _asyncToGenerator(fn) { return function () { var gen = fn.apply(this, arguments); return new Promise(function (resolve, reject) { function step(key, arg) { try { var info = gen[key](arg); var value = info.value; } catch (error) { reject(error); return; } if (info.done) { resolve(value); } else { return Promise.resolve(value).then(function (value) { step("next", value); }, function (err) { step("throw", err); }); } } return step("next"); }); }; }
@@ -108,16 +89,48 @@ function _asyncToGenerator(fn) { return function () { var gen = fn.apply(this, a
 const uid = require('rand-token').uid;
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+const sgMail = require('@sendgrid/mail');
+const nodemailer = require('nodemailer');
 const cors = require('cors')({
   origin: true
 });
+const config = functions.config();
+const Rollbar = require('rollbar');
+const rollbar = new Rollbar({ accessToken: config.rollbar.token });
+const SENDGRID = 'SENDGRID';
+const GMAIL = 'GMAIL';
 
 admin.initializeApp(functions.config().firebase);
 
+exports.processRegisterUser = functions.auth.user().onCreate((() => {
+  var _ref4 = _asyncToGenerator(function* (user) {
+    try {
+      const ref = admin.database().ref("users/" + user.uid);
+      const snapshot = yield ref.once('value');
+      const { firstName, lastName } = snapshot.val();
+
+      yield ref.update({
+        displayName: firstName + ' ' + lastName,
+        refreshTime: new Date().getTime()
+      });
+      console.log('Processed user', user.uid);
+    } catch (e) {
+      console.log('Error processing user', e);
+    }
+  });
+
+  return function (_x6) {
+    return _ref4.apply(this, arguments);
+  };
+})());
+
+/***
+ * Validate email
+ */
 exports.validateEmail = functions.https.onRequest((req, res) => {
   return cors(req, res, _asyncToGenerator(function* () {
     if (yield emailIsValid(req.body.email, res)) {
-      res.status(200).send({});
+      res.status(200).json({});
     }
   }));
 });
@@ -131,35 +144,38 @@ exports.inviteUser = functions.https.onRequest((req, res) => {
     const adminUser = yield checkIsAdmin(req.body.token, res);
 
     if (!adminUser) {
+      // only admins can invite users
+      res.status(400).json({ message: 'Access denied' });
       return false;
     }
 
     // check to make sure this email has not already been invited
     if (!(yield emailIsValid(req.body.email, res))) {
+      res.status(400).json({ message: 'Invitation already sent' });
       return false;
     }
 
     const inviteToken = uid(128);
+    const role = req.body.role ? req.body.role.value : '';
 
-    let customClaims;
-
-    switch (req.body.role) {
-      case 'manager':
-        customClaims = { isManager: true };
-        break;
-      case 'client':
-        customClaims = { isClient: true };
-        break;
-      case 'member':
-        customClaims = { isMember: true };
-        break;
-    }
+    const getCustomClaims = function (role) {
+      switch (role) {
+        case 'manager':
+          return { isManager: true };
+        case 'client':
+          return { isClient: true };
+        case 'member':
+          return { isMember: true };
+        default:
+          return { isAnonymous: true };
+      }
+    };
 
     const newUser = yield createUser({
       email: req.body.email,
       firstName: req.body.firstName,
       lastName: req.body.lastName,
-      customClaims: Object.assign({}, customClaims, { inviteToken })
+      customClaims: Object.assign({}, getCustomClaims(role), { inviteToken })
     });
 
     if (!newUser) {
@@ -167,8 +183,9 @@ exports.inviteUser = functions.https.onRequest((req, res) => {
       return false;
     }
 
-    const invitesRef = admin.database().ref('invites/');
-    const invite = invitesRef.push({
+    console.log('New user', newUser);
+
+    const invite = admin.database().ref('invites/').push({
       token: inviteToken,
       inviter: adminUser.uid,
       email: req.body.email,
@@ -176,11 +193,55 @@ exports.inviteUser = functions.https.onRequest((req, res) => {
       lastName: req.body.lastName
     });
 
-    console.log('Invite token', invite.key);
+    if (!invite) {
+      res.status(500).end();
+      return false;
+    }
 
-    // TODO: send email
+    console.log('Invitation', invite);
 
-    res.status(200).send({});
+    if (!config.feature.sendinviteemail) {
+      res.status(200).json({});
+      return true;
+    }
+
+    const link = `${config.client.url}/${config.client.acceptinvitepath}/${invite.key}/${inviteToken}`;
+
+    console.log('Invitation link', link);
+
+    const msg = {
+      to: newUser.email,
+      from: config.gmail.email,
+      subject: `You've been invited`,
+      text: 'Click here to create your account: ' + link,
+      html: '<strong>Click <a href="${link}">here</a> to create your account.</strong>'
+    };
+
+    if (config.mail.service === GMAIL) {
+      return nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: config.gmail.email,
+          pass: config.gmail.password
+        }
+      }).sendMail(msg, function (error, info) {
+        if (error) {
+          res.status(500).end();
+          return false;
+        }
+        res.status(200).json({});
+      });
+    } else if (config.mail.service === SENDGRID) {
+      try {
+        sgMail.setApiKey(functions.config().sendgrid.key);
+        const req = sgMail.send(msg);
+        res.status(200).json({});
+        return true;
+      } catch (error) {
+        res.status(500).end();
+        return false;
+      }
+    }
   }));
 });
 
@@ -189,20 +250,21 @@ exports.inviteUser = functions.https.onRequest((req, res) => {
  */
 exports.acceptInvite = functions.https.onRequest((req, res) => {
   return cors(req, res, _asyncToGenerator(function* () {
-    const { uid, token, email, password, firstName, lastName } = req.body;
+    const { key, token, email, password, firstName, lastName } = req.body;
 
-    const snapshot = yield admin.database().ref('invites/' + uid).once('value');
+    const snapshot = yield admin.database().ref('invites/' + key).once('value');
     const invite = snapshot.val();
+    console.log('Invite snap', snapshot);
 
     // check to make sure invite exists
     if (!invite) {
-      res.status(400).send('Could not find invitation');
+      res.status(400).json({ message: 'Could not find invitation' });
       return false;
     }
 
     // check to make sure invite tokens match
     if (token !== invite.token) {
-      res.status(400).send('Tokens do not match');
+      res.status(400).json({ message: 'Tokens do not match' });
       return false;
     }
 
@@ -212,13 +274,13 @@ exports.acceptInvite = functions.https.onRequest((req, res) => {
     try {
       user = yield admin.auth().getUserByEmail(invite.email);
     } catch (error) {
-      res.status(500).send('No invited user found');
+      res.status(500).json({ message: 'No invited user found' });
       return false;
     }
 
     // check to make sure the user has not already accepted invitation
     if (!user.customClaims.inviteToken) {
-      res.status(409).send('User has already accepted invitation');
+      res.status(409).json({ message: 'User has already accepted invitation' });
       return false;
     }
 
@@ -227,7 +289,7 @@ exports.acceptInvite = functions.https.onRequest((req, res) => {
       const invitedUser = yield admin.auth().getUserByEmail(email);
 
       if (!invitedUser.customClaims.inviteToken) {
-        res.status(409).send('Email already in use');
+        res.status(409).json({ message: 'Email already in use' });
         return false;
       }
     } catch (error) {
@@ -236,21 +298,21 @@ exports.acceptInvite = functions.https.onRequest((req, res) => {
 
     yield admin.auth().updateUser(user.uid, {
       email,
-      password,
-      displayName: firstName + ' ' + lastName
+      password
     });
 
     yield admin.auth().setCustomUserClaims(user.uid, Object.assign(user.customClaims, { inviteToken: null }));
 
-    yield admin.database().ref('metadata/' + user.uid).set({
+    yield admin.database().ref('users/' + user.uid).set({
       firstName,
       lastName,
+      displayName: firstName + ' ' + lastName,
       refreshTime: new Date().getTime()
     });
 
-    yield admin.database().ref('invites/' + uid).remove();
+    yield admin.database().ref('invites/' + key).remove();
 
-    res.status(200).send();
+    res.status(200).json({});
   }));
 });
 
@@ -259,22 +321,27 @@ exports.acceptInvite = functions.https.onRequest((req, res) => {
  */
 exports.createUser = functions.https.onRequest((req, res) => {
   return cors(req, res, _asyncToGenerator(function* () {
-    console.log('Admin token', req.body.token);
+    try {
+      console.log('Admin token', req.body.token);
 
-    // check to make sure requesting user is an admin
-    const adminUser = yield checkIsAdmin(req.body.token, res);
+      // check to make sure requesting user is an admin
+      const adminUser = yield checkIsAdmin(req.body.token, res);
 
-    if (!adminUser) {
-      return false;
+      if (!adminUser) {
+        return false;
+      }
+
+      // check to make sure this email has not already been invited
+      if (!(yield emailIsValid(req.body.email, res))) {
+        return false;
+      }
+
+      const user = createUser(req.body);
+      res.status(200).json(user);
+    } catch (error) {
+      rollbar.error(error, req);
+      //
     }
-
-    // check to make sure this email has not already been invited
-    if (!(yield emailIsValid(req.body.email, res))) {
-      return false;
-    }
-
-    const user = createUser(req.body);
-    res.status(200).send();
   }));
 });
 
@@ -282,23 +349,29 @@ exports.createUser = functions.https.onRequest((req, res) => {
  * Update with Admin role
  */
 exports.addAdminRole = functions.https.onRequest((() => {
-  var _ref8 = _asyncToGenerator(function* (req, res) {
-    const user = yield admin.auth().getUserByEmail(req.body.email);
+  var _ref9 = _asyncToGenerator(function* (req, res) {
 
-    // check to make sure requesting user is an admin
-    const adminUser = yield checkIsAdmin(req.body.token, res);
+    try {
+      const user = yield admin.auth().getUserByEmail(req.body.email);
 
-    if (!adminUser) {
-      return false;
+      const isAdminUser = yield checkIsAdmin(req.body.token, res);
+
+      if (!isAdminUser) {
+        return false;
+      }
+
+      yield admin.auth().setCustomUserClaims(user.uid, { isAdmin: true });
+
+      yield admin.database().ref("users/" + user.uid).set({ refreshTime: new Date().getTime() });
+
+      res.status(200).end();
+    } catch (error) {
+      rollbar.error(error, req);
+      //
     }
-
-    yield admin.auth().setCustomUserClaims(user.uid, { isAdmin: true });
-    const metadataRef = admin.database().ref("metadata/" + user.uid);
-    metadataRef.set({ refreshTime: new Date().getTime() });
-    res.status(200).end();
   });
 
-  return function (_x6, _x7) {
-    return _ref8.apply(this, arguments);
+  return function (_x7, _x8) {
+    return _ref9.apply(this, arguments);
   };
 })());

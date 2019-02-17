@@ -27,7 +27,7 @@
     "no-undef": "off",
 
     // Warn against template literal placeholder syntax in regular strings
-    "no-template-curly-in-string": 1,
+    "no-template-curly-in-string": "off",
 
     // Warn if no return statements in callbacks of array methods
     "array-callback-return": 1,
