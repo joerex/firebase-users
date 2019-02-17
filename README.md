@@ -13,6 +13,7 @@ This is a set of Firebase endpoints to provide applications with a reliable way 
 ```
 $ npm install -g firebase-tools
 $ firebase login
+$ firebase use --add <project-id>
 $ npm install
 ```
 

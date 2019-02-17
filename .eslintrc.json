@@ -29,9 +29,6 @@
     // Warn against template literal placeholder syntax in regular strings
     "no-template-curly-in-string": 1,
 
-    // Warn if return statements do not either always or never specify values
-    "consistent-return": 1,
-
     // Warn if no return statements in callbacks of array methods
     "array-callback-return": 1,
 
@@ -106,9 +103,6 @@
 
     // Warn against string concatenation with __dirname and __filename
     "no-path-concat": 1,
-
-    // Prefer using arrow functions for callbacks
-    "prefer-arrow-callback": 1,
 
     // Return inside each then() to create readable and reusable Promise chains.
     // Forces developers to return console logs and http calls in promises. 
