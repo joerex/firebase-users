@@ -43,7 +43,7 @@ https://<region>-<project-id>.cloudfunctions.net
 
 
 #### createUser
-Creates a user given an `email`, `firstName`, `lastNmame`.
+Creates a user given an `email`, `firstName`, `lastNmame`, and admin `token`. The token can be obtained from an admin (see [custom claims](https://firebase.google.com/docs/auth/admin/custom-claims)).
   
 ```
 curl -X POST -H "Content-Type:application/json" https://<region>-<project-id>.cloudfunctions.net/createUser -d '{"email": "newuser@email.com", "firstName": "Firstname", "lastName": "Lastname"}'
