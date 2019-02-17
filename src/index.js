@@ -73,6 +73,9 @@ async function checkIsAdmin(token, res) {
  * Process registered user
  */
 /*
+
+// DISABLED in favor of custom create user functions with custom claims
+
 exports.processRegisterUser = functions.auth.user().onCreate(async (user) => {
   if (user.email && !user.isClient) {
     console.log('User before proccessing', user);
@@ -234,8 +237,24 @@ exports.acceptInvite = functions.https.onRequest((req, res) => {
  * Create user
  */
 exports.createUser = functions.https.onRequest((req, res) => {
-  const user = createUser(req.body);
-  res.status(200).end();
+  return cors(req, res, async () => {
+    console.log('Admin token', req.body.token);
+
+    // check to make sure requesting user is an admin
+    const adminUser = await checkIsAdmin(req.body.token, res);
+
+    if (!adminUser) {
+      return false;
+    }
+
+    // check to make sure this email has not already been invited
+    if (!await emailIsValid(req.body.email, res)) {
+      return false;
+    }
+
+    const user = createUser(req.body);
+    res.status(200).send();
+  });
 });
 
 /***

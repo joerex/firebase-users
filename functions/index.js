@@ -83,6 +83,9 @@ let checkIsAdmin = (() => {
  * Process registered user
  */
 /*
+
+// DISABLED in favor of custom create user functions with custom claims
+
 exports.processRegisterUser = functions.auth.user().onCreate(async (user) => {
   if (user.email && !user.isClient) {
     console.log('User before proccessing', user);
@@ -255,15 +258,31 @@ exports.acceptInvite = functions.https.onRequest((req, res) => {
  * Create user
  */
 exports.createUser = functions.https.onRequest((req, res) => {
-  const user = createUser(req.body);
-  res.status(200).end();
+  return cors(req, res, _asyncToGenerator(function* () {
+    console.log('Admin token', req.body.token);
+
+    // check to make sure requesting user is an admin
+    const adminUser = yield checkIsAdmin(req.body.token, res);
+
+    if (!adminUser) {
+      return false;
+    }
+
+    // check to make sure this email has not already been invited
+    if (!(yield emailIsValid(req.body.email, res))) {
+      return false;
+    }
+
+    const user = createUser(req.body);
+    res.status(200).send();
+  }));
 });
 
 /***
  * Update with Admin role
  */
 exports.addAdminRole = functions.https.onRequest((() => {
-  var _ref7 = _asyncToGenerator(function* (req, res) {
+  var _ref8 = _asyncToGenerator(function* (req, res) {
     const user = yield admin.auth().getUserByEmail(req.body.email);
 
     // check to make sure requesting user is an admin
@@ -280,6 +299,6 @@ exports.addAdminRole = functions.https.onRequest((() => {
   });
 
   return function (_x6, _x7) {
-    return _ref7.apply(this, arguments);
+    return _ref8.apply(this, arguments);
   };
 })());
