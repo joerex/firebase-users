@@ -72,7 +72,7 @@ Three roles are currently available to use: `'manager'`, `'client'`, `'member'`.
 
 The token can be obtained from a logged in user with an admin role.
 
-When a user is invited an invite token is created. TODO: email token on invite.
+When a user is invited an invite token is created.
 
 TODO: email token on invite.
 
