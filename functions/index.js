@@ -79,6 +79,35 @@ let checkIsAdmin = (() => {
   };
 })();
 
+let mapUsers = (() => {
+  var _ref4 = _asyncToGenerator(function* (action, nextPageToken) {
+    try {
+      const listUsersResult = yield admin.auth().listUsers(1000, nextPageToken);
+      const count = listUsersResult.users.length;
+
+      yield Promise.all(listUsersResult.users.map((() => {
+        var _ref5 = _asyncToGenerator(function* (userRecord) {
+          yield action(userRecord);
+        });
+
+        return function (_x8) {
+          return _ref5.apply(this, arguments);
+        };
+      })()));
+
+      if (listUsersResult.pageToken) {
+        return yield mapUsers(action, listUsersResult.pageToken);
+      }
+    } catch (e) {
+      console.log('Error mapping users', e);
+    }
+  });
+
+  return function mapUsers(_x6, _x7) {
+    return _ref4.apply(this, arguments);
+  };
+})();
+
 /***
  * Process registered user
  */
@@ -103,7 +132,7 @@ const GMAIL = 'GMAIL';
 admin.initializeApp(functions.config().firebase);
 
 exports.processRegisterUser = functions.auth.user().onCreate((() => {
-  var _ref4 = _asyncToGenerator(function* (user) {
+  var _ref6 = _asyncToGenerator(function* (user) {
     try {
       const ref = admin.database().ref("users/" + user.uid);
       const snapshot = yield ref.once('value');
@@ -119,10 +148,43 @@ exports.processRegisterUser = functions.auth.user().onCreate((() => {
     }
   });
 
-  return function (_x6) {
-    return _ref4.apply(this, arguments);
+  return function (_x9) {
+    return _ref6.apply(this, arguments);
   };
 })());
+
+exports.clearUsers = functions.https.onRequest((req, res) => {
+  return cors(req, res, _asyncToGenerator(function* () {
+    try {
+      let deleteUser = (() => {
+        var _ref8 = _asyncToGenerator(function* (user) {
+          if (user.uid !== adminUser.uid) {
+            yield admin.auth().deleteUser(user.uid);
+            yield admin.database().ref('users/' + user.uid).remove();
+            console.log('Deleted user', user.uid);
+          }
+        });
+
+        return function deleteUser(_x10) {
+          return _ref8.apply(this, arguments);
+        };
+      })();
+
+      const adminUser = yield checkIsAdmin(req.body.token, res);
+
+      if (!adminUser) {
+        res.status(400).json({ message: 'Access denied' });
+        return false;
+      }
+
+      yield mapUsers(deleteUser);
+      res.status(200).json({});
+    } catch (e) {
+      res.status(500).json({ message: 'Unexpected server error' });
+      console.log('Error clearing users', e);
+    }
+  }));
+});
 
 /***
  * Validate email
@@ -248,52 +310,36 @@ exports.inviteUser = functions.https.onRequest((req, res) => {
 /***
  * Accept invite
  */
+
 exports.acceptInvite = functions.https.onRequest((req, res) => {
   return cors(req, res, _asyncToGenerator(function* () {
     const { key, token, email, password, firstName, lastName } = req.body;
 
     const snapshot = yield admin.database().ref('invites/' + key).once('value');
     const invite = snapshot.val();
-    console.log('Invite snap', snapshot);
 
-    // check to make sure invite exists
-    if (!invite) {
-      res.status(400).json({ message: 'Could not find invitation' });
-      return false;
+    // invite exists and tokens match
+    if (!invite || token !== invite.token) {
+      return res.status(400).json({ message: 'Could not find invitation' });
     }
 
-    // check to make sure invite tokens match
-    if (token !== invite.token) {
-      res.status(400).json({ message: 'Tokens do not match' });
-      return false;
+    const user = yield admin.auth().getUserByEmail(invite.email);
+
+    // user was created with invite
+    if (!user) {
+      return res.status(400).json({ message: 'No invited user found' });
     }
 
-    // check to make sure a user was created with invite
-    let user;
-
-    try {
-      user = yield admin.auth().getUserByEmail(invite.email);
-    } catch (error) {
-      res.status(500).json({ message: 'No invited user found' });
-      return false;
-    }
-
-    // check to make sure the user has not already accepted invitation
+    // user has not already accepted invitation
     if (!user.customClaims.inviteToken) {
-      res.status(409).json({ message: 'User has already accepted invitation' });
-      return false;
+      return res.status(400).json({ message: 'User has already accepted invitation' });
     }
 
-    // check to make sure the new email address is not in use already
-    try {
-      const invitedUser = yield admin.auth().getUserByEmail(email);
+    const existingUser = yield admin.auth().getUserByEmail(email);
 
-      if (!invitedUser.customClaims.inviteToken) {
-        res.status(409).json({ message: 'Email already in use' });
-        return false;
-      }
-    } catch (error) {
-      // this should fail
+    // new email address is not in use already
+    if (existingUser.uid !== user.uid) {
+      return res.status(400).json({ message: 'Email already in use' });
     }
 
     yield admin.auth().updateUser(user.uid, {
@@ -312,7 +358,7 @@ exports.acceptInvite = functions.https.onRequest((req, res) => {
 
     yield admin.database().ref('invites/' + key).remove();
 
-    res.status(200).json({});
+    return res.status(200).json({});
   }));
 });
 
@@ -349,7 +395,7 @@ exports.createUser = functions.https.onRequest((req, res) => {
  * Update with Admin role
  */
 exports.addAdminRole = functions.https.onRequest((() => {
-  var _ref9 = _asyncToGenerator(function* (req, res) {
+  var _ref13 = _asyncToGenerator(function* (req, res) {
 
     try {
       const user = yield admin.auth().getUserByEmail(req.body.email);
@@ -371,7 +417,7 @@ exports.addAdminRole = functions.https.onRequest((() => {
     }
   });
 
-  return function (_x7, _x8) {
-    return _ref9.apply(this, arguments);
+  return function (_x11, _x12) {
+    return _ref13.apply(this, arguments);
   };
 })());

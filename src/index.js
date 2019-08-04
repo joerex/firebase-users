@@ -81,6 +81,24 @@ async function checkIsAdmin(token, res) {
   return user;
 }
 
+async function mapUsers(action, nextPageToken) {
+  try {
+    const listUsersResult = await admin.auth().listUsers(1000, nextPageToken);
+    const count = listUsersResult.users.length
+
+      await Promise.all(listUsersResult.users.map(async (userRecord) => {
+          await action(userRecord)
+      }))
+
+    if (listUsersResult.pageToken) {
+      return await mapUsers(action, listUsersResult.pageToken);
+    }
+  }
+  catch(e) {
+    console.log('Error mapping users', e);
+  }
+}
+
 /***
  * Process registered user
  */
@@ -100,6 +118,34 @@ exports.processRegisterUser = functions.auth.user().onCreate(async (user) => {
     console.log('Error processing user', e)
   }
 });
+
+exports.clearUsers = functions.https.onRequest( (req, res) => {
+  return cors(req, res, async () => {
+    try {
+      const adminUser = await checkIsAdmin(req.body.token, res);
+
+      if (!adminUser) {
+        res.status(400).json({ message: 'Access denied' });
+        return false;
+      }
+
+      async function deleteUser(user) {
+        if (user.uid !== adminUser.uid) {
+            await admin.auth().deleteUser(user.uid)
+            await admin.database().ref('users/' + user.uid).remove()
+            console.log('Deleted user', user.uid)
+        }
+      }
+
+      await mapUsers(deleteUser)
+      res.status(200).json({})
+    }
+    catch (e) {
+      res.status(500).json({ message: 'Unexpected server error'})
+      console.log('Error clearing users', e)
+    }
+  })
+})
 
 /***
  * Validate email
@@ -232,73 +278,55 @@ exports.inviteUser = functions.https.onRequest((req, res) => {
 /***
  * Accept invite
  */
+
 exports.acceptInvite = functions.https.onRequest((req, res) => {
   return cors(req, res, async () => {
-    const {key, token, email, password, firstName, lastName} = req.body;
+      const {key, token, email, password, firstName, lastName} = req.body;
 
-    const snapshot = await admin.database().ref('invites/' + key).once('value');
-    const invite = snapshot.val();
-    console.log('Invite snap', snapshot)
+      const snapshot = await admin.database().ref('invites/' + key).once('value')
+      const invite = snapshot.val()
 
-    // check to make sure invite exists
-    if (!invite) {
-      res.status(400).json({ message: 'Could not find invitation' });
-      return false;
-    }
-
-    // check to make sure invite tokens match
-    if (token !== invite.token) {
-      res.status(400).json({ message: 'Tokens do not match' });
-      return false;
-    }
-
-    // check to make sure a user was created with invite
-    let user;
-
-    try {
-      user = await admin.auth().getUserByEmail(invite.email);
-    }
-    catch(error) {
-      res.status(500).json({ message: 'No invited user found' });
-      return false;
-    }
-
-    // check to make sure the user has not already accepted invitation
-    if (!user.customClaims.inviteToken) {
-      res.status(409).json({ message: 'User has already accepted invitation' });
-      return false;
-    }
-
-    // check to make sure the new email address is not in use already
-    try {
-      const invitedUser = await admin.auth().getUserByEmail(email);
-
-      if (!invitedUser.customClaims.inviteToken) {
-        res.status(409).json({ message: 'Email already in use' });
-        return false;
+      // invite exists and tokens match
+      if (!invite || token !== invite.token) {
+        return res.status(400).json({ message: 'Could not find invitation' })
       }
-    }
-    catch (error) {
-      // this should fail
-    }
 
-    await admin.auth().updateUser(user.uid, {
-      email,
-      password,
-    });
+      const user = await admin.auth().getUserByEmail(invite.email)
 
-    await admin.auth().setCustomUserClaims(user.uid, Object.assign(user.customClaims, {inviteToken: null}));
+      // user was created with invite
+      if (!user) {
+        return res.status(400).json({ message: 'No invited user found' })
+      }
 
-    await admin.database().ref('users/' + user.uid).set({
-      firstName,
-      lastName,
-      displayName: firstName + ' ' + lastName,
-      refreshTime: new Date().getTime()
-    });
+      // user has not already accepted invitation
+      if (!user.customClaims.inviteToken) {
+        return res.status(400).json({ message: 'User has already accepted invitation' })
+      }
 
-    await admin.database().ref('invites/' + key).remove();
+      const existingUser = await admin.auth().getUserByEmail(email)
 
-    res.status(200).json({});
+      // new email address is not in use already
+      if (existingUser.uid !== user.uid) {
+        return res.status(400).json({ message: 'Email already in use' })
+      }
+
+      await admin.auth().updateUser(user.uid, {
+        email,
+        password,
+      });
+
+      await admin.auth().setCustomUserClaims(user.uid, Object.assign(user.customClaims, {inviteToken: null}));
+
+      await admin.database().ref('users/' + user.uid).set({
+        firstName,
+        lastName,
+        displayName: firstName + ' ' + lastName,
+        refreshTime: new Date().getTime()
+      });
+
+      await admin.database().ref('invites/' + key).remove();
+
+      return res.status(200).json({});
   });
 });
 
